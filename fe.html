@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AI Voice Assistant</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f9;
+      color: #333;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+
+    h1 {
+      color: #4CAF50;
+      margin-top: 20px;
+      font-size: 2em;
+      font-weight: 600;
+    }
+
+    .record-btn {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background-color: red;
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+      border: none;
+      cursor: pointer;
+      margin: 40px auto 10px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.3s ease;
+    }
+
+    .recording {
+      background-color: #f44336;
+      animation: pulse 1s infinite ease-out;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    .recording-animation {
+      display: none;
+      margin-bottom: 20px;
+    }
+
+    .wave-bar {
+      display: inline-block;
+      width: 8px;
+      height: 20px;
+      background-color: #4CAF50;
+      margin: 0 2px;
+      animation: wave 1s infinite ease-in-out;
+    }
+
+    .wave-bar:nth-child(2) { animation-delay: 0.1s; }
+    .wave-bar:nth-child(3) { animation-delay: 0.2s; }
+    .wave-bar:nth-child(4) { animation-delay: 0.3s; }
+
+    @keyframes wave {
+      0%, 100% { height: 20px; }
+      50% { height: 40px; }
+    }
+
+    #response {
+      margin: 30px auto;
+      width: 90%;
+      max-width: 600px;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      display: none;
+      text-align: left;
+    }
+
+    #response p {
+      margin: 10px 0;
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    #processing {
+      font-size: 18px;
+      font-weight: bold;
+      color: #666;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>AI Voice Assistant</h1>
+
+  <button class="record-btn" id="recordBtn">Start Recording</button>
+
+  <!-- Upload file option -->
+  <div style="margin-top: 20px;">
+    <input type="file" id="audioUpload" accept="audio/*">
+    <p style="font-size: 14px; color: #555;">or upload an audio file</p>
+  </div>
+
+  <div id="recordingAnimation" class="recording-animation">
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+    <div class="wave-bar"></div>
+  </div>
+
+  <div id="audioWrapper">
+    <audio id="audioPlayer" controls style="display: none; margin: 20px auto; display: block;"></audio>
+  </div>
+
+  <div id="processing">Processing...</div>
+
+  <div id="response"></div>
+
+  <script>
+    const recordBtn = document.getElementById("recordBtn");
+    const audioUpload = document.getElementById("audioUpload");
+    const audioPlayer = document.getElementById("audioPlayer");
+    const responseDiv = document.getElementById("response");
+    const processingDiv = document.getElementById("processing");
+    const recordingAnimation = document.getElementById("recordingAnimation");
+
+    let mediaRecorder;
+    let audioChunks = [];
+
+    recordBtn.onclick = () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        recordBtn.textContent = "Start Recording";
+        recordBtn.classList.remove("recording");
+        recordingAnimation.style.display = "none";
+      } else {
+        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = e => {
+            audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(audioChunks, { type: 'audio/mp3' });
+            const url = URL.createObjectURL(blob);
+            audioPlayer.src = url;
+            audioPlayer.style.display = "block";
+            sendAudioToServer(blob);
+          };
+
+          mediaRecorder.start();
+          recordBtn.textContent = "Stop Recording";
+          recordBtn.classList.add("recording");
+          recordingAnimation.style.display = "block";
+        });
+      }
+    };
+
+    audioUpload.addEventListener("change", function () {
+      const file = audioUpload.files[0];
+      if (file) {
+        audioPlayer.style.display = "block";
+        audioPlayer.src = URL.createObjectURL(file);
+        sendAudioToServer(file);
+      }
+    });
+
+    function sendAudioToServer(blob) {
+      const formData = new FormData();
+      formData.append("file", blob, "audio.mp3");
+
+      processingDiv.style.display = "block";
+      responseDiv.style.display = "none";
+
+      fetch("/upload_audio/", {
+        method: "POST",
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        processingDiv.style.display = "none";
+        responseDiv.style.display = "block";
+        responseDiv.innerHTML = `
+          <p><strong>Transcript:</strong> ${data.transcript}</p>
+          <p><strong>Intent:</strong> ${data.intent}</p>
+          <p><strong>Response:</strong> ${data.response}</p>
+          <p><strong>Language:</strong> ${data.language}</p>
+          <p><strong>Confidence:</strong> ${data.confidence}</p>
+        `;
+      })
+      .catch(err => {
+        processingDiv.style.display = "none";
+        responseDiv.style.display = "block";
+        responseDiv.innerHTML = `<p style="color:red;">Error processing audio. Try again.</p>`;
+        console.error(err);
+      });
+    }
+  </script>
+</body>
+</html>
